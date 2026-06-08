@@ -50,7 +50,8 @@ public static class PresentationFeatureInstaller
         manager.slideChanger = slideChanger;
         manager.speakerTimer = speakerTimer;
         manager.audience = audience;
-        manager.createMenuOnStart = true;
+        manager.createMenuOnStart = false;
+        manager.autoStartTrainingScene = true;
 
         GameObject clicker = GameObject.Find("Clicker");
         if (clicker == null)
@@ -70,6 +71,7 @@ public static class PresentationFeatureInstaller
             clickerControls.sessionManager = manager;
             clickerControls.createButtonPanel = true;
             clickerControls.useActivateForNextSlide = false;
+            clickerControls.dockOnStandWhenReleased = true;
         }
         else
         {
@@ -84,6 +86,6 @@ public static class PresentationFeatureInstaller
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
         EditorSceneManager.SaveOpenScenes();
 
-        Debug.Log("Presentation training features installed: menu, statistics, clicker controls and audience reactions.");
+        Debug.Log("Presentation training features installed: separate main menu, statistics, clicker controls and audience reactions.");
     }
 }

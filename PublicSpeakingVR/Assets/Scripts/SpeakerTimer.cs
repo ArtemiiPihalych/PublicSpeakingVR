@@ -25,6 +25,7 @@ public class SpeakerTimer : MonoBehaviour
 
     public float RemainingTime => currentTime;
     public bool IsRunning => isRunning;
+    public bool IsFinished => currentTime <= 0f && finishEventSent;
     public float ElapsedTime => Mathf.Max(0f, totalTime - currentTime);
     public float Progress01 => totalTime <= 0f ? 1f : Mathf.Clamp01(ElapsedTime / totalTime);
 
@@ -88,6 +89,12 @@ public class SpeakerTimer : MonoBehaviour
         finishEventSent = false;
         UpdateText();
         TimerReset?.Invoke();
+    }
+
+    public void SetDurationMinutes(int minutes)
+    {
+        totalTime = Mathf.Max(1, minutes) * 60f;
+        ResetTimer();
     }
 
     public void AddTime(float seconds)

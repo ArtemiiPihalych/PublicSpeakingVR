@@ -5,6 +5,7 @@ using UnityEngine.XR.Interaction.Toolkit;
 using UnityEngine.XR.Interaction.Toolkit.UI;
 
 [RequireComponent(typeof(XRGrabInteractable))]
+[RequireComponent(typeof(Rigidbody))]
 public class ClickerControls : MonoBehaviour
 {
     public PresentationSessionManager sessionManager;
@@ -12,13 +13,25 @@ public class ClickerControls : MonoBehaviour
     public bool useActivateForNextSlide = false;
     public Vector3 panelLocalPosition = new Vector3(0f, 0.055f, 0.02f);
     public Vector3 panelLocalEulerAngles = new Vector3(70f, 0f, 0f);
+    public bool protectFromDeskFall = true;
+    public bool dockOnStandWhenReleased = true;
+    public Vector3 standRestPosition = new Vector3(-1.64f, 1.72f, 9.12f);
+    public Vector3 standRestEulerAngles = new Vector3(0f, -31.946f, 0f);
 
     private XRGrabInteractable grabInteractable;
+    private Rigidbody clickerRigidbody;
+    private Vector3 safePosition;
+    private Quaternion safeRotation;
+    private bool isHeld;
 
     private void Awake()
     {
         grabInteractable = GetComponent<XRGrabInteractable>();
+        clickerRigidbody = GetComponent<Rigidbody>();
         if (sessionManager == null) sessionManager = FindObjectOfType<PresentationSessionManager>();
+
+        ConfigurePhysics();
+        CacheSafePose();
 
         if (createButtonPanel)
         {
@@ -31,6 +44,8 @@ public class ClickerControls : MonoBehaviour
         if (grabInteractable != null)
         {
             grabInteractable.activated.AddListener(OnActivated);
+            grabInteractable.selectEntered.AddListener(OnSelectEntered);
+            grabInteractable.selectExited.AddListener(OnSelectExited);
         }
     }
 
@@ -39,11 +54,15 @@ public class ClickerControls : MonoBehaviour
         if (grabInteractable != null)
         {
             grabInteractable.activated.RemoveListener(OnActivated);
+            grabInteractable.selectEntered.RemoveListener(OnSelectEntered);
+            grabInteractable.selectExited.RemoveListener(OnSelectExited);
         }
     }
 
     private void Update()
     {
+        PreventDeskFall();
+
         if (Input.GetKeyDown(KeyCode.C))
         {
             ToggleTimer();
@@ -78,6 +97,63 @@ public class ClickerControls : MonoBehaviour
         }
     }
 
+    private void ConfigurePhysics()
+    {
+        if (clickerRigidbody == null) return;
+
+        clickerRigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+        clickerRigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+        clickerRigidbody.maxDepenetrationVelocity = 2f;
+        clickerRigidbody.sleepThreshold = 0.001f;
+        DockOnStand();
+    }
+
+    private void CacheSafePose()
+    {
+        safePosition = standRestPosition;
+        safeRotation = Quaternion.Euler(standRestEulerAngles);
+    }
+
+    private void PreventDeskFall()
+    {
+        if (!protectFromDeskFall || clickerRigidbody == null || isHeld) return;
+
+        float distanceToStand = Vector3.Distance(transform.position, safePosition);
+        if (dockOnStandWhenReleased && distanceToStand > 0.025f)
+        {
+            DockOnStand();
+        }
+    }
+
+    private void OnSelectEntered(SelectEnterEventArgs args)
+    {
+        isHeld = true;
+        if (clickerRigidbody == null) return;
+
+        clickerRigidbody.isKinematic = false;
+        clickerRigidbody.useGravity = false;
+    }
+
+    private void OnSelectExited(SelectExitEventArgs args)
+    {
+        isHeld = false;
+        DockOnStand();
+    }
+
+    private void DockOnStand()
+    {
+        if (!dockOnStandWhenReleased || clickerRigidbody == null) return;
+
+        safePosition = standRestPosition;
+        safeRotation = Quaternion.Euler(standRestEulerAngles);
+        clickerRigidbody.isKinematic = false;
+        clickerRigidbody.velocity = Vector3.zero;
+        clickerRigidbody.angularVelocity = Vector3.zero;
+        clickerRigidbody.useGravity = false;
+        clickerRigidbody.isKinematic = true;
+        transform.SetPositionAndRotation(safePosition, safeRotation);
+    }
+
     private void CreateButtonPanel()
     {
         if (transform.Find("Clicker Button Panel") != null) return;
@@ -100,10 +176,10 @@ public class ClickerControls : MonoBehaviour
         Image background = canvasObject.AddComponent<Image>();
         background.color = new Color(0.02f, 0.025f, 0.03f, 0.92f);
 
-        CreateButton(canvasObject.transform, "Next", "Next", new Vector2(0f, 68f), NextSlide);
-        CreateButton(canvasObject.transform, "Timer", "Start/Pause", new Vector2(0f, 16f), ToggleTimer);
-        CreateButton(canvasObject.transform, "Finish", "Finish", new Vector2(0f, -36f), FinishSession);
-        CreateButton(canvasObject.transform, "Audience", "Audience", new Vector2(0f, -88f), AudienceReaction);
+        CreateButton(canvasObject.transform, "Next", "\u0421\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0439 \u0441\u043b\u0430\u0439\u0434", new Vector2(0f, 68f), NextSlide);
+        CreateButton(canvasObject.transform, "Timer", "\u0421\u0442\u0430\u0440\u0442/\u043f\u0430\u0443\u0437\u0430", new Vector2(0f, 16f), ToggleTimer);
+        CreateButton(canvasObject.transform, "Finish", "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044c", new Vector2(0f, -36f), FinishSession);
+        CreateButton(canvasObject.transform, "Audience", "\u0420\u0435\u0430\u043a\u0446\u0438\u044f \u0437\u0430\u043b\u0430", new Vector2(0f, -88f), AudienceReaction);
     }
 
     private Button CreateButton(Transform parent, string name, string label, Vector2 anchoredPosition, UnityEngine.Events.UnityAction action)
