@@ -37,6 +37,7 @@ public class PresentationSessionManager : MonoBehaviour
         ResolveReferences();
         ImproveSceneLighting();
         EnsureEventSystem();
+        EnsureVrMovement();
 
         if (createMenuOnStart)
         {
@@ -217,7 +218,8 @@ public class PresentationSessionManager : MonoBehaviour
         {
             mainCamera.nearClipPlane = 0.01f;
             mainCamera.farClipPlane = 1000f;
-            mainCamera.allowHDR = true;
+            mainCamera.allowHDR = false;
+            mainCamera.allowMSAA = false;
         }
 
         foreach (Light light in FindObjectsOfType<Light>())
@@ -487,13 +489,29 @@ public class PresentationSessionManager : MonoBehaviour
 
     private void OnSlideChanged(int index, int count)
     {
-        bool finalSlideReachedInTime = sessionStarted && audience != null && index == count - 1 && speakerTimer != null && speakerTimer.RemainingTime > 0f;
-        if (!finalSlideReachedInTime || successfulFinalReactionPlayed) return;
+        bool finalSlideReached = sessionStarted && index == count - 1 && speakerTimer != null;
+        if (!finalSlideReached) return;
+
+        speakerTimer.PauseTimer();
+
+        if (successfulFinalReactionPlayed)
+        {
+            RefreshStats();
+            return;
+        }
+
+        if (audience == null || speakerTimer.RemainingTime <= 0f)
+        {
+            SetStatus("\u0424\u0438\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0441\u043b\u0430\u0439\u0434: \u0442\u0430\u0439\u043c\u0435\u0440 \u043e\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d");
+            RefreshStats();
+            return;
+        }
 
         successfulFinalReactionPlayed = true;
         audience.StopAmbientReactions();
         audience.TriggerFinalApplause();
         SetStatus("\u0424\u0438\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0441\u043b\u0430\u0439\u0434: \u0437\u0430\u043b \u0430\u043f\u043b\u043e\u0434\u0438\u0440\u0443\u0435\u0442");
+        RefreshStats();
     }
 
     private void OnTimerFinished()
@@ -529,11 +547,45 @@ public class PresentationSessionManager : MonoBehaviour
 
     private void EnsureEventSystem()
     {
-        if (FindObjectOfType<EventSystem>() != null) return;
+        EventSystem existing = FindObjectOfType<EventSystem>();
+        if (existing != null)
+        {
+            if (existing.GetComponent<XRUIInputModule>() == null)
+            {
+                existing.gameObject.AddComponent<XRUIInputModule>();
+            }
+            return;
+        }
 
         GameObject eventSystem = new GameObject("EventSystem");
         eventSystem.AddComponent<EventSystem>();
-        eventSystem.AddComponent<StandaloneInputModule>();
+        eventSystem.AddComponent<XRUIInputModule>();
+    }
+
+    private void EnsureVrMovement()
+    {
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null) return;
+
+        Transform root = mainCamera.transform;
+        while (root.parent != null && root.parent.name != "XR Origin (XR Rig)")
+        {
+            root = root.parent;
+        }
+
+        if (root.parent != null && root.parent.name == "XR Origin (XR Rig)")
+        {
+            root = root.parent;
+        }
+
+        VRThumbstickMovement movement = root.GetComponent<VRThumbstickMovement>();
+        if (movement == null)
+        {
+            movement = root.gameObject.AddComponent<VRThumbstickMovement>();
+        }
+
+        movement.xrRoot = root;
+        movement.head = mainCamera.transform;
     }
 
     private string FormatTime(float seconds)

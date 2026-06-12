@@ -12,5 +12,6 @@ EditorBuildSettings:
     path: Assets/Scenes/SampleScene.unity
     guid: 9fc0d4010bbf28b4594072e72b8655ab
   m_configObjects:
+    com.htc.upm.wave.xrsdk.xrsettings: {fileID: 11400000, guid: f6c249718cb64b1478e8764b93bcb732, type: 2}
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: b0a9cacc4334c23479fa179c874f671d, type: 2}
     com.unity.xr.openxr.settings4: {fileID: 11400000, guid: a57e248e78c97c44786391c8c11fa2eb, type: 2}

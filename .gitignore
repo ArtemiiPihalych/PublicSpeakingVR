@@ -24,6 +24,7 @@ sysinfo.txt
 
 # Unity crash reports and cache
 *.stackdump
+*.log
 *.apk
 *.aab
 
@@ -31,11 +32,17 @@ sysinfo.txt
 .vscode/
 .idea/
 .vs/
+__pycache__/
+*.pyc
 .DS_Store
 Thumbs.db
 desktop.ini
 
 # Office temporary files
 ~$*
+
+# Local generated scratch files
+diploma_v31_tmp.docx
+v31_tables.txt
 
 # Keep generated диплом deliverables and Unity source assets tracked.

@@ -19,6 +19,7 @@ public class AudienceReactionController : MonoBehaviour
     private readonly Dictionary<Animator, float> defaultSpeeds = new Dictionary<Animator, float>();
     private Coroutine ambientRoutine;
     private AudioSource audioSource;
+    private Coroutine pendingPlayback;
 
     private void Awake()
     {
@@ -178,6 +179,10 @@ public class AudienceReactionController : MonoBehaviour
 
         audioSource.playOnAwake = false;
         audioSource.spatialBlend = 0f;
+        audioSource.dopplerLevel = 0f;
+        audioSource.rolloffMode = AudioRolloffMode.Linear;
+        audioSource.minDistance = 1f;
+        audioSource.maxDistance = 500f;
         audioSource.volume = reactionVolume;
         audioSource.priority = 32;
         audioSource.mute = false;
@@ -204,16 +209,45 @@ public class AudienceReactionController : MonoBehaviour
         EnsureAudio();
         if (clip != null)
         {
-            audioSource.Stop();
-            audioSource.clip = clip;
-            audioSource.volume = reactionVolume;
-            audioSource.Play();
-            Debug.Log($"Audience reaction sound: {clip.name}, length={clip.length:0.00}, source={audioSource.gameObject.name}, listenerVolume={AudioListener.volume:0.00}");
+            if (pendingPlayback != null)
+            {
+                StopCoroutine(pendingPlayback);
+            }
+
+            pendingPlayback = StartCoroutine(PlayWhenLoaded(clip));
         }
         else
         {
             Debug.LogWarning("Audience reaction sound clip is missing.");
         }
+    }
+
+    private IEnumerator PlayWhenLoaded(AudioClip clip)
+    {
+        if (clip.loadState == AudioDataLoadState.Unloaded)
+        {
+            clip.LoadAudioData();
+        }
+
+        float timeoutAt = Time.realtimeSinceStartup + 2f;
+        while (clip.loadState == AudioDataLoadState.Loading && Time.realtimeSinceStartup < timeoutAt)
+        {
+            yield return null;
+        }
+
+        if (clip.loadState != AudioDataLoadState.Loaded)
+        {
+            Debug.LogWarning($"Audience reaction sound failed to load: {clip.name}, state={clip.loadState}");
+            pendingPlayback = null;
+            yield break;
+        }
+
+        audioSource.Stop();
+        audioSource.clip = null;
+        audioSource.volume = reactionVolume;
+        audioSource.PlayOneShot(clip, reactionVolume);
+        Debug.Log($"Audience reaction sound: {clip.name}, length={clip.length:0.00}, source={audioSource.gameObject.name}, listenerVolume={AudioListener.volume:0.00}, loadState={clip.loadState}, isPlaying={audioSource.isPlaying}");
+        pendingPlayback = null;
     }
 
     private AudioClip CreateApplauseClip()

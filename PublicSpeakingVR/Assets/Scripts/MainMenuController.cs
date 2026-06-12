@@ -3,6 +3,8 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using UnityEngine.XR;
+using UnityEngine.XR.Interaction.Toolkit.UI;
 
 public class MainMenuController : MonoBehaviour
 {
@@ -11,12 +13,15 @@ public class MainMenuController : MonoBehaviour
     public string trainingSceneName = "SampleScene";
     public int defaultMinutes = 5;
     public int[] minuteOptions = { 1, 3, 5, 7, 10, 15, 20 };
+    public string xrOriginResourcePath = "XR Origin (XR Rig)";
+    public string xrInteractionSetupResourcePath = "XR Interaction Setup";
 
     private int selectedMinuteIndex;
     private TextMeshProUGUI selectedMinutesText;
 
     private void Awake()
     {
+        EnsureXrRig();
         EnsureCamera();
         EnsureEventSystem();
         selectedMinuteIndex = Mathf.Max(0, System.Array.IndexOf(minuteOptions, defaultMinutes));
@@ -29,16 +34,34 @@ public class MainMenuController : MonoBehaviour
     {
         GameObject canvasObject = new GameObject("Main Menu Canvas");
         Canvas canvas = canvasObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        bool worldSpaceMenu = ShouldUseWorldSpaceMenu();
+        canvas.renderMode = worldSpaceMenu ? RenderMode.WorldSpace : RenderMode.ScreenSpaceOverlay;
+        canvas.worldCamera = Camera.main;
 
         CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920f, 1080f);
 
         canvasObject.AddComponent<GraphicRaycaster>();
+        if (worldSpaceMenu)
+        {
+            canvasObject.AddComponent<TrackedDeviceGraphicRaycaster>();
+            Transform cameraTransform = Camera.main != null ? Camera.main.transform : null;
+            if (cameraTransform != null)
+            {
+                canvasObject.transform.SetParent(cameraTransform, false);
+                canvasObject.transform.localPosition = new Vector3(0f, 0f, 2.2f);
+                canvasObject.transform.localRotation = Quaternion.identity;
+                canvasObject.transform.localScale = Vector3.one * 0.0022f;
+            }
+        }
         canvasObject.AddComponent<Image>().color = new Color(0.055f, 0.07f, 0.075f, 1f);
 
         RectTransform root = canvasObject.GetComponent<RectTransform>();
+        if (worldSpaceMenu)
+        {
+            root.sizeDelta = new Vector2(900f, 620f);
+        }
         GameObject panel = new GameObject("Menu Panel");
         panel.transform.SetParent(root, false);
 
@@ -145,12 +168,55 @@ public class MainMenuController : MonoBehaviour
         cameraObject.AddComponent<AudioListener>();
     }
 
+    private void EnsureXrRig()
+    {
+        if (!ShouldUseWorldSpaceMenu()) return;
+
+        if (GameObject.Find("XR Origin (XR Rig)") == null)
+        {
+            GameObject xrOriginPrefab = Resources.Load<GameObject>(xrOriginResourcePath);
+            if (xrOriginPrefab != null)
+            {
+                GameObject xrOrigin = Instantiate(xrOriginPrefab);
+                xrOrigin.name = "XR Origin (XR Rig)";
+                xrOrigin.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+            }
+            else
+            {
+                Debug.LogWarning($"XR Origin prefab was not found in Resources: {xrOriginResourcePath}");
+            }
+        }
+
+        if (GameObject.Find("XR Interaction Setup") == null)
+        {
+            GameObject setupPrefab = Resources.Load<GameObject>(xrInteractionSetupResourcePath);
+            if (setupPrefab != null)
+            {
+                GameObject setup = Instantiate(setupPrefab);
+                setup.name = "XR Interaction Setup";
+            }
+        }
+    }
+
     private void EnsureEventSystem()
     {
-        if (FindObjectOfType<EventSystem>() != null) return;
+        EventSystem existing = FindObjectOfType<EventSystem>();
+        if (existing != null)
+        {
+            if (existing.GetComponent<XRUIInputModule>() == null)
+            {
+                existing.gameObject.AddComponent<XRUIInputModule>();
+            }
+            return;
+        }
 
         GameObject eventSystem = new GameObject("EventSystem");
         eventSystem.AddComponent<EventSystem>();
-        eventSystem.AddComponent<StandaloneInputModule>();
+        eventSystem.AddComponent<XRUIInputModule>();
+    }
+
+    private bool ShouldUseWorldSpaceMenu()
+    {
+        return XRSettings.enabled || XRSettings.isDeviceActive;
     }
 }
