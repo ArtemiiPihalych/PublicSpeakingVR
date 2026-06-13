@@ -1,18 +1,28 @@
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using UnityEngine.XR.Interaction.Toolkit.UI;
 
 public class PresentationSessionManager : MonoBehaviour
 {
     private const string DurationMinutesKey = "TrainingDurationMinutes";
+    private const float ResultScreenDelaySeconds = 3f;
+
+    private enum ResultScreenMode
+    {
+        TimeExpiredBeforeLastSlide,
+        FinishedOnLastSlideInTime
+    }
 
     public SlideChanger slideChanger;
     public SpeakerTimer speakerTimer;
     public AudienceReactionController audience;
     public Transform menuAnchor;
+    public string mainMenuSceneName = "MainMenu";
     public bool createMenuOnStart = true;
     public bool autoStartTrainingScene = true;
     public KeyCode menuToggleKey = KeyCode.M;
@@ -26,11 +36,14 @@ public class PresentationSessionManager : MonoBehaviour
     private TextMeshProUGUI statusText;
     private TextMeshProUGUI timerButtonText;
     private TMP_Dropdown minuteDropdown;
+    private Canvas resultCanvas;
+    private Coroutine resultScreenRoutine;
     private float sessionElapsed;
     private int slideChangesAtStart;
     private bool sessionStarted;
     private bool sessionFinished;
     private bool successfulFinalReactionPlayed;
+    private bool resultScreenScheduled;
 
     private void Awake()
     {
@@ -90,7 +103,9 @@ public class PresentationSessionManager : MonoBehaviour
         sessionFinished = false;
         sessionStarted = true;
         successfulFinalReactionPlayed = false;
+        resultScreenScheduled = false;
         slideChangesAtStart = slideChanger != null ? slideChanger.ManualChangeCount : 0;
+        HideResultScreen();
 
         if (speakerTimer != null)
         {
@@ -157,7 +172,9 @@ public class PresentationSessionManager : MonoBehaviour
         sessionStarted = false;
         sessionFinished = false;
         successfulFinalReactionPlayed = false;
+        resultScreenScheduled = false;
         slideChangesAtStart = slideChanger != null ? slideChanger.ManualChangeCount : 0;
+        HideResultScreen();
 
         if (speakerTimer != null)
         {
@@ -487,12 +504,125 @@ public class PresentationSessionManager : MonoBehaviour
         if (statusText != null) statusText.text = status;
     }
 
+    private void ScheduleResultScreen(ResultScreenMode mode)
+    {
+        if (resultScreenScheduled) return;
+
+        resultScreenScheduled = true;
+        if (resultScreenRoutine != null)
+        {
+            StopCoroutine(resultScreenRoutine);
+        }
+
+        resultScreenRoutine = StartCoroutine(ShowResultScreenAfterDelay(mode));
+    }
+
+    private IEnumerator ShowResultScreenAfterDelay(ResultScreenMode mode)
+    {
+        yield return new WaitForSeconds(ResultScreenDelaySeconds);
+        ShowResultScreen(mode);
+        resultScreenRoutine = null;
+    }
+
+    private void ShowResultScreen(ResultScreenMode mode)
+    {
+        if (menuCanvas != null) menuCanvas.gameObject.SetActive(false);
+
+        if (resultCanvas != null)
+        {
+            Destroy(resultCanvas.gameObject);
+            resultCanvas = null;
+        }
+
+        GameObject canvasObject = new GameObject("Training Result Canvas");
+        canvasObject.transform.SetParent(menuAnchor != null ? menuAnchor : transform, false);
+        canvasObject.transform.localPosition = new Vector3(0f, -0.1f, 1.65f);
+        canvasObject.transform.localRotation = Quaternion.identity;
+        canvasObject.transform.localScale = Vector3.one * 0.0016f;
+
+        resultCanvas = canvasObject.AddComponent<Canvas>();
+        resultCanvas.renderMode = RenderMode.WorldSpace;
+        resultCanvas.worldCamera = Camera.main;
+        resultCanvas.GetComponent<RectTransform>().sizeDelta = new Vector2(720f, 430f);
+
+        canvasObject.AddComponent<GraphicRaycaster>();
+        canvasObject.AddComponent<TrackedDeviceGraphicRaycaster>();
+
+        Image background = canvasObject.AddComponent<Image>();
+        background.color = new Color(0.035f, 0.045f, 0.052f, 0.92f);
+
+        string title = mode == ResultScreenMode.FinishedOnLastSlideInTime
+            ? "Тренировка завершена"
+            : "Время выступления вышло";
+
+        CreateText(canvasObject.transform, "Result Title", title, 32, new Vector2(0f, 150f), new Vector2(650f, 56f));
+        CreateText(canvasObject.transform, "Result Stats", BuildResultStatsText(mode), 24, new Vector2(0f, 25f), new Vector2(640f, 170f));
+        CreateButton(canvasObject.transform, "Return To Menu", "В главное меню", new Vector2(0f, -145f), ReturnToMainMenu);
+    }
+
+    private string BuildResultStatsText(ResultScreenMode mode)
+    {
+        float spent = GetSpentTime();
+        float remaining = speakerTimer != null ? speakerTimer.RemainingTime : 0f;
+
+        if (mode == ResultScreenMode.TimeExpiredBeforeLastSlide)
+        {
+            int remainingSlides = 0;
+            if (slideChanger != null)
+            {
+                remainingSlides = Mathf.Max(0, slideChanger.SlideCount - slideChanger.CurrentSlideIndex - 1);
+            }
+
+            return
+                $"Осталось слайдов: {remainingSlides}\n" +
+                $"Затрачено времени: {FormatTime(spent)}";
+        }
+
+        return
+            $"Затрачено времени: {FormatTime(spent)}\n" +
+            $"Осталось времени: {FormatTime(remaining)}";
+    }
+
+    private void HideResultScreen()
+    {
+        if (resultScreenRoutine != null)
+        {
+            StopCoroutine(resultScreenRoutine);
+            resultScreenRoutine = null;
+        }
+
+        if (resultCanvas != null)
+        {
+            Destroy(resultCanvas.gameObject);
+            resultCanvas = null;
+        }
+    }
+
+    private float GetSpentTime()
+    {
+        if (speakerTimer != null)
+        {
+            return Mathf.Max(sessionElapsed, speakerTimer.ElapsedTime);
+        }
+
+        return sessionElapsed;
+    }
+
+    public void ReturnToMainMenu()
+    {
+        if (!string.IsNullOrWhiteSpace(mainMenuSceneName))
+        {
+            SceneManager.LoadScene(mainMenuSceneName);
+        }
+    }
+
     private void OnSlideChanged(int index, int count)
     {
         bool finalSlideReached = sessionStarted && index == count - 1 && speakerTimer != null;
         if (!finalSlideReached) return;
 
         speakerTimer.PauseTimer();
+        sessionFinished = true;
 
         if (successfulFinalReactionPlayed)
         {
@@ -500,7 +630,7 @@ public class PresentationSessionManager : MonoBehaviour
             return;
         }
 
-        if (audience == null || speakerTimer.RemainingTime <= 0f)
+        if (speakerTimer.RemainingTime <= 0f)
         {
             SetStatus("\u0424\u0438\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0441\u043b\u0430\u0439\u0434: \u0442\u0430\u0439\u043c\u0435\u0440 \u043e\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d");
             RefreshStats();
@@ -508,21 +638,31 @@ public class PresentationSessionManager : MonoBehaviour
         }
 
         successfulFinalReactionPlayed = true;
-        audience.StopAmbientReactions();
-        audience.TriggerFinalApplause();
+        if (audience != null)
+        {
+            audience.StopAmbientReactions();
+            audience.TriggerFinalApplause();
+        }
+
         SetStatus("\u0424\u0438\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0441\u043b\u0430\u0439\u0434: \u0437\u0430\u043b \u0430\u043f\u043b\u043e\u0434\u0438\u0440\u0443\u0435\u0442");
         RefreshStats();
+        ScheduleResultScreen(ResultScreenMode.FinishedOnLastSlideInTime);
     }
 
     private void OnTimerFinished()
     {
-        if (!IsLastSlide() && audience != null)
+        if (!IsLastSlide())
         {
-            audience.StopAmbientReactions();
-            audience.TriggerNegativeReaction();
+            if (audience != null)
+            {
+                audience.StopAmbientReactions();
+                audience.TriggerNegativeReaction();
+            }
+
             SetStatus("\u0412\u0440\u0435\u043c\u044f \u0432\u044b\u0448\u043b\u043e: \u0437\u0430\u043b \u043d\u0435\u0434\u043e\u0432\u043e\u043b\u0435\u043d");
             sessionFinished = true;
             RefreshStats();
+            ScheduleResultScreen(ResultScreenMode.TimeExpiredBeforeLastSlide);
             return;
         }
 
@@ -550,6 +690,11 @@ public class PresentationSessionManager : MonoBehaviour
         EventSystem existing = FindObjectOfType<EventSystem>();
         if (existing != null)
         {
+            if (existing.GetComponent<StandaloneInputModule>() == null)
+            {
+                existing.gameObject.AddComponent<StandaloneInputModule>();
+            }
+
             if (existing.GetComponent<XRUIInputModule>() == null)
             {
                 existing.gameObject.AddComponent<XRUIInputModule>();
@@ -559,6 +704,7 @@ public class PresentationSessionManager : MonoBehaviour
 
         GameObject eventSystem = new GameObject("EventSystem");
         eventSystem.AddComponent<EventSystem>();
+        eventSystem.AddComponent<StandaloneInputModule>();
         eventSystem.AddComponent<XRUIInputModule>();
     }
 

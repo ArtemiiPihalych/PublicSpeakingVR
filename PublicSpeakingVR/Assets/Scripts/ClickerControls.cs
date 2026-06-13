@@ -15,6 +15,8 @@ public class ClickerControls : MonoBehaviour
     public Vector3 panelLocalEulerAngles = new Vector3(70f, 0f, 0f);
     public bool protectFromDeskFall = true;
     public bool dockOnStandWhenReleased = true;
+    public bool forceVisibleMaterial = true;
+    public Color visibleClickerColor = new Color(0.02f, 0.08f, 0.16f, 1f);
     public Vector3 standRestPosition = new Vector3(-1.64f, 1.72f, 9.12f);
     public Vector3 standRestEulerAngles = new Vector3(0f, -31.946f, 0f);
 
@@ -22,6 +24,7 @@ public class ClickerControls : MonoBehaviour
     private Rigidbody clickerRigidbody;
     private Vector3 safePosition;
     private Quaternion safeRotation;
+    private float nextVisibilityCheckTime;
     private bool isHeld;
 
     private void Awake()
@@ -30,6 +33,7 @@ public class ClickerControls : MonoBehaviour
         clickerRigidbody = GetComponent<Rigidbody>();
         if (sessionManager == null) sessionManager = FindObjectOfType<PresentationSessionManager>();
 
+        EnsureVisibleAndInteractable();
         ConfigurePhysics();
         CacheSafePose();
 
@@ -47,6 +51,12 @@ public class ClickerControls : MonoBehaviour
             grabInteractable.selectEntered.AddListener(OnSelectEntered);
             grabInteractable.selectExited.AddListener(OnSelectExited);
         }
+
+        EnsureVisibleAndInteractable();
+        if (!isHeld)
+        {
+            DockOnStand();
+        }
     }
 
     private void OnDisable()
@@ -61,6 +71,12 @@ public class ClickerControls : MonoBehaviour
 
     private void Update()
     {
+        if (Time.time >= nextVisibilityCheckTime)
+        {
+            EnsureVisibleAndInteractable();
+            nextVisibilityCheckTime = Time.time + 0.5f;
+        }
+
         PreventDeskFall();
 
         if (Input.GetKeyDown(KeyCode.C))
@@ -106,6 +122,48 @@ public class ClickerControls : MonoBehaviour
         clickerRigidbody.maxDepenetrationVelocity = 2f;
         clickerRigidbody.sleepThreshold = 0.001f;
         DockOnStand();
+    }
+
+    private void EnsureVisibleAndInteractable()
+    {
+        gameObject.SetActive(true);
+
+        foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true))
+        {
+            renderer.enabled = true;
+            if (forceVisibleMaterial)
+            {
+                ApplyVisibleMaterial(renderer);
+            }
+        }
+
+        foreach (Collider collider in GetComponentsInChildren<Collider>(true))
+        {
+            collider.enabled = true;
+            collider.isTrigger = false;
+        }
+
+        if (grabInteractable != null)
+        {
+            grabInteractable.enabled = true;
+        }
+
+        if (clickerRigidbody != null && !isHeld)
+        {
+            clickerRigidbody.useGravity = false;
+            clickerRigidbody.isKinematic = true;
+        }
+    }
+
+    private void ApplyVisibleMaterial(Renderer renderer)
+    {
+        foreach (Material material in renderer.materials)
+        {
+            if (material != null && material.HasProperty("_Color"))
+            {
+                material.color = visibleClickerColor;
+            }
+        }
     }
 
     private void CacheSafePose()

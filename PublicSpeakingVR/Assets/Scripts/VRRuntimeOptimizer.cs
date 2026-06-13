@@ -11,6 +11,8 @@ using VIVE.OpenXR.DisplayRefreshRate;
 
 public class VRRuntimeOptimizer : MonoBehaviour
 {
+    private static readonly bool EnableRuntimeOptimizer = false;
+
     public float androidEyeTextureScale = 0.72f;
     public int androidTargetFrameRate = 72;
     public int maxAnimatedAudienceOnAndroid = 24;
@@ -23,6 +25,7 @@ public class VRRuntimeOptimizer : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void CreateOnSceneLoad()
     {
+        if (!EnableRuntimeOptimizer) return;
         if (created) return;
 
         GameObject optimizerObject = new GameObject("VR Runtime Optimizer");
