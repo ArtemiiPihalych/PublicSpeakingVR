@@ -1,0 +1,11 @@
+import { FileBlob, PresentationFile } from "@oai/artifact-tool";
+const p = await PresentationFile.importPptx(await FileBlob.load("C:/Users/Artem/Downloads/diplom/outputs/presentation_v4_work/template.pptx"));
+const sh = p.slides.items[1].shapes.items[1];
+console.log("shape", sh.id, sh.name);
+console.log("text keys", Object.keys(sh.text));
+console.log("text value", sh.text.toString?.(), String(sh.text));
+console.log("position", sh.position);
+console.log("style", sh.text.style);
+sh.text = "TEST\nLINE";
+const out = await PresentationFile.exportPptx(p);
+await out.save("C:/Users/Artem/Downloads/diplom/outputs/presentation_v4_work/test_text_edit.pptx");

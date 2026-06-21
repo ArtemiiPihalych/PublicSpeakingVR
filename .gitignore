@@ -46,3 +46,7 @@ diploma_v31_tmp.docx
 v31_tables.txt
 
 # Keep generated диплом deliverables and Unity source assets tracked.
+
+# Local package dependencies generated while building documentation artifacts
+node_modules/
+PublicSpeakingVR.zip
